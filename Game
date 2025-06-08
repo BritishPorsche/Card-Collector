@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Card Pack Game</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f2f5;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .pack-btn {
+      margin: 4px;
+      padding: 10px 15px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .grid {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .card-container {
+      perspective: 1000px;
+      width: 100px;
+      height: 140px;
+      position: relative;
+    }
+
+    .card-inner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transition: transform 0.8s;
+      transform-style: preserve-3d;
+    }
+
+    .card-container.flipped .card-inner {
+      transform: rotateY(180deg);
+    }
+
+    .card-face {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 10px;
+      backface-visibility: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-size: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      padding: 8px;
+    }
+
+    .card-front {
+      transform: rotateY(180deg);
+      background: white;
+    }
+
+    .card-back {
+      background: #444;
+      color: #fff;
+    }
+
+    .Common { color: gray; }
+    .Uncommon { color: green; }
+    .Rare { color: blue; }
+    .Epic { color: purple; }
+    .Legendary { color: goldenrod; }
+    .Mythic {
+      background: linear-gradient(45deg, red, yellow, blue);
+      color: white;
+      font-weight: bold;
+    }
+
+    .badge {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      background: red;
+      color: white;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 50%;
+      font-weight: bold;
+    }
+
+    select {
+      margin: 10px;
+      padding: 5px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Card Pack Opener</h1>
+<p>💰 Currency: <span id="currency">1000</span></p>
+<p>🎮 Press A/S/D/F/G to earn money (5–100) + combo (asdfg/gfdsa = 250)</p>
+
+<div id="pack-buttons" class="grid"></div>
+
+<h2>🎁 Recently Opened</h2>
+<div id="recent-cards" class="grid"></div>
+
+<h2>📚 My Collection</h2>
+<div>
+  <label>Filter:</label>
+  <select id="rarityFilter">
+    <option value="All">All Rarities</option>
+    <option value="Common">Common</option>
+    <option value="Uncommon">Uncommon</option>
+    <option value="Rare">Rare</option>
+    <option value="Epic">Epic</option>
+    <option value="Legendary">Legendary</option>
+    <option value="Mythic">Mythic</option>
+  </select>
+  <select id="sortOrder">
+    <option value="asc">Sort by ID ↑</option>
+    <option value="desc">Sort by ID ↓</option>
+  </select>
+</div>
+<div id="collection" class="grid"></div>
+
+<script>
+  const rarities = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'];
+  const rarityChances = {
+    Basic: { Common: 0.7, Uncommon: 0.2, Rare: 0.08, Epic: 0.015, Legendary: 0.005 },
+    Silver: { Common: 0.5, Uncommon: 0.3, Rare: 0.15, Epic: 0.04, Legendary: 0.01 },
+    Gold: { Common: 0.3, Uncommon: 0.3, Rare: 0.25, Epic: 0.1, Legendary: 0.05 },
+    Copper: { Common: 0.6, Uncommon: 0.25, Rare: 0.1, Epic: 0.03, Legendary: 0.02 },
+    Aluminium: { Common: 0.6, Uncommon: 0.25, Rare: 0.1, Epic: 0.03, Legendary: 0.02 },
+    Iron: { Common: 0.6, Uncommon: 0.25, Rare: 0.1, Epic: 0.03, Legendary: 0.02 },
+    Carbon: { Common: 0.6, Uncommon: 0.25, Rare: 0.1, Epic: 0.03, Legendary: 0.02 },
+    Steel: { Common: 0.6, Uncommon: 0.25, Rare: 0.1, Epic: 0.03, Legendary: 0.02 },
+    Diamond: { Mythic: 0.00001, Common: 0.5, Uncommon: 0.2, Rare: 0.15, Epic: 0.09, Legendary: 0.05999 }
+  };
+
+  const keyValues = { a: 5, s: 10, d: 20, f: 50, g: 100 };
+  const combos = ['asdfg', 'gfdsa'];
+
+  const cards = [];
+  for (let i = 0; i < 2000; i++) {
+    const rarity = rarities[Math.floor(i / 400)];
+    cards.push({ id: i, name: `Card ${i}`, rarity });
+  }
+  cards.push({ id: 2000, name: 'Mythic Phoenix', rarity: 'Mythic' });
+  cards.push({ id: 2001, name: 'Mythic Dragon', rarity: 'Mythic' });
+  cards.push({ id: 2002, name: 'Mythic Leviathan', rarity: 'Mythic' });
+
+  let currency = 1000;
+  let keySeq = '';
+  const collectionMap = {};
+  const currencyDisplay = document.getElementById('currency');
+  const recentEl = document.getElementById('recent-cards');
+  const collectionEl = document.getElementById('collection');
+  const rarityFilter = document.getElementById('rarityFilter');
+  const sortOrder = document.getElementById('sortOrder');
+
+  function updateCurrencyDisplay() {
+    currencyDisplay.textContent = currency;
+  }
+
+  function getRandomCard(packType) {
+    const roll = Math.random();
+    let cumulative = 0;
+    for (const rarity of rarities) {
+      cumulative += rarityChances[packType][rarity] || 0;
+      if (roll < cumulative) {
+        const pool = cards.filter(c => c.rarity === rarity);
+        return pool[Math.floor(Math.random() * pool.length)];
+      }
+    }
+    return cards[0];
+  }
+
+  function openPack(packType, cost) {
+    if (currency < cost) return alert("Not enough currency!");
+    currency -= cost;
+    updateCurrencyDisplay();
+    const newCards = Array.from({ length: 5 }, () => getRandomCard(packType));
+    newCards.forEach(card => {
+      collectionMap[card.id] = collectionMap[card.id] || { ...card, count: 0 };
+      collectionMap[card.id].count++;
+    });
+    displayRecentCards(newCards);
+    updateCollection();
+  }
+
+  function createCardElement(card, showCount = false) {
+    const container = document.createElement('div');
+    container.className = 'card-container';
+    setTimeout(() => container.classList.add('flipped'), 100);
+
+    const inner = document.createElement('div');
+    inner.className = 'card-inner';
+
+    const front = document.createElement('div');
+    front.className = `card-face card-front ${card.rarity}`;
+    front.innerHTML = `<strong>${card.name}</strong><br><span>${card.rarity}</span>`;
+
+    if (showCount && card.count > 1) {
+      const badge = document.createElement('div');
+      badge.className = 'badge';
+      badge.textContent = card.count;
+      front.appendChild(badge);
+    }
+
+    const back = document.createElement('div');
+    back.className = 'card-face card-back';
+    back.textContent = '🃏';
+
+    inner.appendChild(back);
+    inner.appendChild(front);
+    container.appendChild(inner);
+    return container;
+  }
+
+  function displayRecentCards(cards) {
+    recentEl.innerHTML = '';
+    cards.forEach(card => {
+      recentEl.appendChild(createCardElement(card));
+    });
+  }
+
+  function updateCollection() {
+    collectionEl.innerHTML = '';
+    const cardsArray = Object.values(collectionMap);
+    const filtered = cardsArray.filter(card =>
+      rarityFilter.value === 'All' || card.rarity === rarityFilter.value
+    );
+    filtered.sort((a, b) =>
+      sortOrder.value === 'asc' ? a.id - b.id : b.id - a.id
+    );
+
+    filtered.forEach(card => {
+      const cardEl = createCardElement(card, true);
+      collectionEl.appendChild(cardEl);
+    });
+  }
+
+  Object.entries(rarityChances).forEach(([name], i) => {
+    const btn = document.createElement('button');
+    btn.className = 'pack-btn';
+    const cost = name === 'Diamond' ? 1000 : (i + 1) * 100;
+    btn.textContent = `${name} Pack (${cost})`;
+    btn.onclick = () => openPack(name, cost);
+    document.getElementById('pack-buttons').appendChild(btn);
+  });
+
+  document.addEventListener('keydown', (e) => {
+    const key = e.key.toLowerCase();
+    if (key in keyValues) {
+      currency += keyValues[key];
+      keySeq = (keySeq + key).slice(-5);
+      if (combos.includes(keySeq)) currency += 250;
+      updateCurrencyDisplay();
+    }
+  });
+
+  rarityFilter.onchange = updateCollection;
+  sortOrder.onchange = updateCollection;
+
+  updateCurrencyDisplay();
+</script>
+
+</body>
+</html>
